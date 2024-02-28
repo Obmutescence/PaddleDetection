@@ -277,6 +277,8 @@ class TTFFPN(nn.Layer):
         encoder_layer="TTFTransformerLayer",
         hidden_dim=256,
         pe_temperature=10000,
+        eval_size=None,
+        feat_strides=[4, 8, 16, 32],
     ):
         super(TTFFPN, self).__init__()
         self.planes = planes
@@ -288,6 +290,8 @@ class TTFFPN(nn.Layer):
         self.num_encoder_layers = num_encoder_layers
         # self.hidden_dim = hidden_dim
         self.pe_temperature = pe_temperature
+        self.eval_size = eval_size
+        self.feat_strides = feat_strides
 
         self.upsample_list = []
         self.shortcut_list = []
@@ -332,6 +336,19 @@ class TTFFPN(nn.Layer):
                 for _ in range(len(use_encoder_idx))
             ]
         )
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        if self.eval_size:
+            for idx in self.use_encoder_idx:
+                stride = self.feat_strides[idx]
+                pos_embed = self.build_2d_sincos_position_embedding(
+                    self.eval_size[1] // stride,
+                    self.eval_size[0] // stride,
+                    self.hidden_dim,  # 1024
+                    self.pe_temperature,
+                )
+                setattr(self, f"pos_embed{idx}", pos_embed)
 
     @staticmethod
     def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
@@ -396,6 +413,7 @@ class TTFFPN(nn.Layer):
     def from_config(cls, cfg, input_shape):
         return {
             "in_channels": [i.channels for i in input_shape],
+            "feat_strides": [i.stride for i in input_shape],
         }
 
     @property
