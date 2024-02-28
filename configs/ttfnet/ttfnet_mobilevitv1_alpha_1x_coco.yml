@@ -1,0 +1,13 @@
+_BASE_: [
+  '../datasets/coco_detection.yml',
+  '../runtime.yml',
+  '_base_/optimizer_1x.yml',
+  '_base_/ttfnet_mobilevitv1_alpha.yml',
+  '_base_/ttfnet_reader.yml',
+]
+
+# custom_black_list:
+#   - pow
+#   - elementwise_pow
+
+weights: output/ttfnet_mobilevitv1_alpha_1x_coco/model_final

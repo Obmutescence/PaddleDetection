@@ -31,7 +31,7 @@ class HMHead(nn.Layer):
         ch_out (int): The channel number of output Tensor.
         num_classes (int): Number of classes.
         conv_num (int): The convolution number of hm_feat.
-        dcn_head(bool): whether use dcn in head. False by default. 
+        dcn_head(bool): whether use dcn in head. False by default.
         lite_head(bool): whether use lite version. False by default.
         norm_type (string): norm type, 'sync_bn', 'bn', 'gn' are optional.
             bn by default
@@ -39,29 +39,33 @@ class HMHead(nn.Layer):
     Return:
         Heatmap head output
     """
-    __shared__ = ['num_classes', 'norm_type']
+
+    __shared__ = ["num_classes", "norm_type"]
 
     def __init__(
-            self,
-            ch_in,
-            ch_out=128,
-            num_classes=80,
-            conv_num=2,
-            dcn_head=False,
-            lite_head=False,
-            norm_type='bn', ):
+        self,
+        ch_in,
+        ch_out=128,
+        num_classes=80,
+        conv_num=2,
+        dcn_head=False,
+        lite_head=False,
+        norm_type="bn",
+    ):
         super(HMHead, self).__init__()
         head_conv = nn.Sequential()
         for i in range(conv_num):
-            name = 'conv.{}'.format(i)
+            name = "conv.{}".format(i)
             if lite_head:
-                lite_name = 'hm.' + name
+                lite_name = "hm." + name
                 head_conv.add_sublayer(
                     lite_name,
                     LiteConv(
                         in_channels=ch_in if i == 0 else ch_out,
                         out_channels=ch_out,
-                        norm_type=norm_type))
+                        norm_type=norm_type,
+                    ),
+                )
             else:
                 if dcn_head:
                     head_conv.add_sublayer(
@@ -70,7 +74,9 @@ class HMHead(nn.Layer):
                             in_channels=ch_in if i == 0 else ch_out,
                             out_channels=ch_out,
                             kernel_size=3,
-                            weight_attr=ParamAttr(initializer=Normal(0, 0.01))))
+                            weight_attr=ParamAttr(initializer=Normal(0, 0.01)),
+                        ),
+                    )
                 else:
                     head_conv.add_sublayer(
                         name,
@@ -81,21 +87,25 @@ class HMHead(nn.Layer):
                             padding=1,
                             weight_attr=ParamAttr(initializer=Normal(0, 0.01)),
                             bias_attr=ParamAttr(
-                                learning_rate=2., regularizer=L2Decay(0.))))
-                head_conv.add_sublayer(name + '.act', nn.ReLU())
+                                learning_rate=2.0, regularizer=L2Decay(0.0)
+                            ),
+                        ),
+                    )
+                head_conv.add_sublayer(name + ".act", nn.ReLU())
         self.feat = head_conv
         bias_init = float(-np.log((1 - 0.01) / 0.01))
-        weight_attr = None if lite_head else ParamAttr(initializer=Normal(0,
-                                                                          0.01))
+        weight_attr = None if lite_head else ParamAttr(initializer=Normal(0, 0.01))
         self.head = nn.Conv2D(
             in_channels=ch_out,
             out_channels=num_classes,
             kernel_size=1,
             weight_attr=weight_attr,
             bias_attr=ParamAttr(
-                learning_rate=2.,
-                regularizer=L2Decay(0.),
-                initializer=Constant(bias_init)))
+                learning_rate=2.0,
+                regularizer=L2Decay(0.0),
+                initializer=Constant(bias_init),
+            ),
+        )
 
     def forward(self, feat):
         out = self.feat(feat)
@@ -117,27 +127,32 @@ class WHHead(nn.Layer):
     Return:
         Width & Height head output
     """
-    __shared__ = ['norm_type']
 
-    def __init__(self,
-                 ch_in,
-                 ch_out=64,
-                 conv_num=2,
-                 dcn_head=False,
-                 lite_head=False,
-                 norm_type='bn'):
+    __shared__ = ["norm_type"]
+
+    def __init__(
+        self,
+        ch_in,
+        ch_out=64,
+        conv_num=2,
+        dcn_head=False,
+        lite_head=False,
+        norm_type="bn",
+    ):
         super(WHHead, self).__init__()
         head_conv = nn.Sequential()
         for i in range(conv_num):
-            name = 'conv.{}'.format(i)
+            name = "conv.{}".format(i)
             if lite_head:
-                lite_name = 'wh.' + name
+                lite_name = "wh." + name
                 head_conv.add_sublayer(
                     lite_name,
                     LiteConv(
                         in_channels=ch_in if i == 0 else ch_out,
                         out_channels=ch_out,
-                        norm_type=norm_type))
+                        norm_type=norm_type,
+                    ),
+                )
             else:
                 if dcn_head:
                     head_conv.add_sublayer(
@@ -146,7 +161,9 @@ class WHHead(nn.Layer):
                             in_channels=ch_in if i == 0 else ch_out,
                             out_channels=ch_out,
                             kernel_size=3,
-                            weight_attr=ParamAttr(initializer=Normal(0, 0.01))))
+                            weight_attr=ParamAttr(initializer=Normal(0, 0.01)),
+                        ),
+                    )
                 else:
                     head_conv.add_sublayer(
                         name,
@@ -157,19 +174,21 @@ class WHHead(nn.Layer):
                             padding=1,
                             weight_attr=ParamAttr(initializer=Normal(0, 0.01)),
                             bias_attr=ParamAttr(
-                                learning_rate=2., regularizer=L2Decay(0.))))
-                head_conv.add_sublayer(name + '.act', nn.ReLU())
+                                learning_rate=2.0, regularizer=L2Decay(0.0)
+                            ),
+                        ),
+                    )
+                head_conv.add_sublayer(name + ".act", nn.ReLU())
 
-        weight_attr = None if lite_head else ParamAttr(initializer=Normal(0,
-                                                                          0.01))
+        weight_attr = None if lite_head else ParamAttr(initializer=Normal(0, 0.01))
         self.feat = head_conv
         self.head = nn.Conv2D(
             in_channels=ch_out,
             out_channels=4,
             kernel_size=1,
             weight_attr=weight_attr,
-            bias_attr=ParamAttr(
-                learning_rate=2., regularizer=L2Decay(0.)))
+            bias_attr=ParamAttr(learning_rate=2.0, regularizer=L2Decay(0.0)),
+        )
 
     def forward(self, feat):
         out = self.feat(feat)
@@ -207,30 +226,45 @@ class TTFHead(nn.Layer):
 
     """
 
-    __shared__ = ['num_classes', 'down_ratio', 'norm_type']
-    __inject__ = ['hm_loss', 'wh_loss']
+    __shared__ = ["num_classes", "down_ratio", "norm_type"]
+    __inject__ = ["hm_loss", "wh_loss"]
 
-    def __init__(self,
-                 in_channels,
-                 num_classes=80,
-                 hm_head_planes=128,
-                 wh_head_planes=64,
-                 hm_head_conv_num=2,
-                 wh_head_conv_num=2,
-                 hm_loss='CTFocalLoss',
-                 wh_loss='GIoULoss',
-                 wh_offset_base=16.,
-                 down_ratio=4,
-                 dcn_head=False,
-                 lite_head=False,
-                 norm_type='bn',
-                 ags_module=False):
+    def __init__(
+        self,
+        in_channels,
+        num_classes=80,
+        hm_head_planes=128,
+        wh_head_planes=64,
+        hm_head_conv_num=2,
+        wh_head_conv_num=2,
+        hm_loss="CTFocalLoss",
+        wh_loss="GIoULoss",
+        wh_offset_base=16.0,
+        down_ratio=4,
+        dcn_head=False,
+        lite_head=False,
+        norm_type="bn",
+        ags_module=False,
+    ):
         super(TTFHead, self).__init__()
         self.in_channels = in_channels
-        self.hm_head = HMHead(in_channels, hm_head_planes, num_classes,
-                              hm_head_conv_num, dcn_head, lite_head, norm_type)
-        self.wh_head = WHHead(in_channels, wh_head_planes, wh_head_conv_num,
-                              dcn_head, lite_head, norm_type)
+        self.hm_head = HMHead(
+            in_channels,
+            hm_head_planes,
+            num_classes,
+            hm_head_conv_num,
+            dcn_head,
+            lite_head,
+            norm_type,
+        )
+        self.wh_head = WHHead(
+            in_channels,
+            wh_head_planes,
+            wh_head_conv_num,
+            dcn_head,
+            lite_head,
+            norm_type,
+        )
         self.hm_loss = hm_loss
         self.wh_loss = wh_loss
 
@@ -242,7 +276,9 @@ class TTFHead(nn.Layer):
     def from_config(cls, cfg, input_shape):
         if isinstance(input_shape, (list, tuple)):
             input_shape = input_shape[0]
-        return {'in_channels': input_shape.channels, }
+        return {
+            "in_channels": input_shape.channels,
+        }
 
     def forward(self, feats):
         hm = self.hm_head(feats)
@@ -274,15 +310,15 @@ class TTFHead(nn.Layer):
         avg_factor = paddle.sum(mask) + 1e-4
 
         base_step = self.down_ratio
-        shifts_x = paddle.arange(0, W * base_step, base_step, dtype='int32')
-        shifts_y = paddle.arange(0, H * base_step, base_step, dtype='int32')
+        shifts_x = paddle.arange(0, W * base_step, base_step, dtype="int32")
+        shifts_y = paddle.arange(0, H * base_step, base_step, dtype="int32")
         shift_y, shift_x = paddle.tensor.meshgrid([shifts_y, shifts_x])
         base_loc = paddle.stack([shift_x, shift_y], axis=0)
         base_loc.stop_gradient = True
 
         pred_boxes = paddle.concat(
-            [0 - pred_wh[:, 0:2, :, :] + base_loc, pred_wh[:, 2:4] + base_loc],
-            axis=1)
+            [0 - pred_wh[:, 0:2, :, :] + base_loc, pred_wh[:, 2:4] + base_loc], axis=1
+        )
         pred_boxes = paddle.transpose(pred_boxes, [0, 2, 3, 1])
         boxes = paddle.transpose(box_target, [0, 2, 3, 1])
         boxes.stop_gradient = True
@@ -290,22 +326,15 @@ class TTFHead(nn.Layer):
         if self.ags_module:
             pred_hm_max = paddle.max(pred_hm, axis=1, keepdim=True)
             pred_hm_max_softmax = F.softmax(pred_hm_max, axis=1)
-            pred_hm_max_softmax = paddle.transpose(pred_hm_max_softmax,
-                                                   [0, 2, 3, 1])
-            pred_hm_max_softmax = self.filter_loc_by_weight(pred_hm_max_softmax,
-                                                            mask)
+            pred_hm_max_softmax = paddle.transpose(pred_hm_max_softmax, [0, 2, 3, 1])
+            pred_hm_max_softmax = self.filter_loc_by_weight(pred_hm_max_softmax, mask)
         else:
             pred_hm_max_softmax = None
 
-        pred_boxes, boxes, mask = self.filter_box_by_weight(pred_boxes, boxes,
-                                                            mask)
+        pred_boxes, boxes, mask = self.filter_box_by_weight(pred_boxes, boxes, mask)
         mask.stop_gradient = True
-        wh_loss = self.wh_loss(
-            pred_boxes,
-            boxes,
-            iou_weight=mask.unsqueeze(1),
-            loc_reweight=pred_hm_max_softmax)
+        wh_loss = self.wh_loss(pred_boxes, boxes, iou_weight=mask.unsqueeze(1))
         wh_loss = wh_loss / avg_factor
 
-        ttf_loss = {'hm_loss': hm_loss, 'wh_loss': wh_loss}
+        ttf_loss = {"hm_loss": hm_loss, "wh_loss": wh_loss}
         return ttf_loss
