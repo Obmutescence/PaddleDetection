@@ -906,20 +906,20 @@ class MobileViTV1(nn.Layer):
 
         x = self.conv3x3(inputs["image"])  # 1/2
         x = self.mv2_block_1(x)
-        x = self.mv2_block_2(x)
-        x = self.mv2_block_3(x)  # 1/2
-        x = self.mv2_block_4(x)  # 128
+        x = self.mv2_block_2(x)  # \
+        x = self.mv2_block_3(x)
+        x = self.mv2_block_4(x)
         return_list.append(x)
 
-        x = self.mv2_block_5(x)  # 64
+        x = self.mv2_block_5(x)  # \
         x = self.mvit_block_1(x)
         return_list.append(x)
 
-        x = self.mv2_block_6(x)  # 32
+        x = self.mv2_block_6(x)  # \
         x = self.mvit_block_2(x)
         return_list.append(x)
 
-        x = self.mv2_block_7(x)  # 16
+        x = self.mv2_block_7(x)  # \
         x = self.mvit_block_3(x)
         return_list.append(x)
 
@@ -940,6 +940,41 @@ class MobileViTV1(nn.Layer):
             raise RuntimeError(
                 "pretrained type is not available. Please use `string` or `boolean` type."
             )
+
+
+@register
+class ResMobileViTV1(MobileViTV1):
+
+    def forward(self, inputs):
+
+        return_list = []
+
+        x = self.conv3x3(inputs["image"])  # 1/2
+        x = self.mv2_block_1(x)
+        x = self.mv2_block_2(x)  # \
+
+        # ----- 128 -----
+        h = x
+        x = self.mv2_block_3(x) + x
+        x = self.mv2_block_4(x) + x + h
+        return_list.append(x)
+
+        # ----- 64 -----
+        x = self.mv2_block_5(x)  # \
+        x = self.mvit_block_1(x) + x
+        return_list.append(x)
+
+        # ----- 32 -----
+        x = self.mv2_block_6(x)  # \
+        x = self.mvit_block_2(x) + x
+        return_list.append(x)
+
+        # ----- 16 -----
+        x = self.mv2_block_7(x)  # \
+        x = self.mvit_block_3(x) + x
+        return_list.append(x)
+
+        return return_list
 
 
 def MobileViT_XXS(pretrained=False, use_ssld=False, **kwargs):

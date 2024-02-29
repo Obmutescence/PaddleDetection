@@ -2,15 +2,15 @@ architecture: TTFNet
 # pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/DarkNet53_pretrained.pdparams
 
 TTFNet:
-  backbone: MobileViTV1 
+  backbone: ResMobileViTV1 
   neck: TTFFPN
   ttf_head: TTFHead
   post_process: BBoxPostProcess
 
-MobileViTV1:
+ResMobileViTV1:
   pretrained: true
   arch_name: MobileViT_XS
-  rezero: false
+  rezero: true
 
 TTFFPN:
   planes: [256, 128, 64]
