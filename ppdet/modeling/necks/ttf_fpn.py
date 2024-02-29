@@ -12,20 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import math
+import copy
+
 import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
 from paddle import ParamAttr
 from paddle.nn.initializer import Constant, Uniform, Normal, XavierUniform
-from ppdet.core.workspace import register, serializable
 from paddle.regularizer import L2Decay
-from ppdet.modeling.layers import DeformableConvV2, ConvNormLayer, LiteConv
-import math
-import copy
+
 from ppdet.modeling.ops import batch_norm
+from ppdet.core.workspace import register, serializable
+from ppdet.modeling.layers import DeformableConvV2, ConvNormLayer, LiteConv
 from ..shape_spec import ShapeSpec
 from ..initializer import xavier_uniform_, linear_init_
 from ..layers import MultiHeadAttention
+from .ccanet import CrissCrossAttention
 
 __all__ = ["TTFFPN"]
 
