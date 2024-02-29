@@ -32,9 +32,8 @@ TTFHead:
     name: CTFocalLoss
     loss_weight: 1.
   wh_loss:
-    name: alpha_DIouLoss
+    name: GIoULoss
     loss_weight: 5.
-    alpha: 3
     reduction: sum
   hm_decay_iter: -1 # 不先优化 hm_loss
   
