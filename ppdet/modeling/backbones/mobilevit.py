@@ -507,6 +507,32 @@ class Attention(nn.Layer):
         return out
 
 
+def drop_path(x, drop_prob=0.0, training=False):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ...
+    """
+    if drop_prob == 0.0 or not training:
+        return x
+    keep_prob = paddle.to_tensor(1 - drop_prob, dtype=x.dtype)
+    shape = (paddle.shape(x)[0],) + (1,) * (x.ndim - 1)
+    random_tensor = keep_prob + paddle.rand(shape, dtype=x.dtype)
+    random_tensor = paddle.floor(random_tensor)  # binarize
+    output = x.divide(keep_prob) * random_tensor
+    return output
+
+
+class DropPath(nn.Layer):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob=None):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training)
+
+
 class EncoderLayer(nn.Layer):
     def __init__(
         self,
@@ -548,6 +574,59 @@ class EncoderLayer(nn.Layer):
         return x
 
 
+class ReZeroEncoderLayer(nn.Layer):
+    r"""RZTXEncoderLayer is made up of self-attn and feedforward network with
+    residual weights for faster convergece.
+    This encoder layer is based on the paper "ReZero is All You Need:
+    Fast Convergence at Large Depth".
+    Thomas Bachlechner*, Bodhisattwa Prasad Majumder*, Huanru Henry Mao*,
+    Garrison W. Cottrell, Julian McAuley. 2020.
+    Args:
+        d_model: the number of expected features in the input (required).
+        nhead: the number of heads in the multiheadattention models (required).
+        dim_feedforward: the dimension of the feedforward network model (default=2048).
+        dropout: the dropout value (default=0.1).
+        activation: the activation function of intermediate layer, relu or gelu (default=relu).
+        use_res_init: Use residual initialization
+    """
+
+    def __init__(
+        self,
+        embed_dim,
+        num_heads=4,
+        qkv_bias=True,
+        mlp_ratio=2.0,
+        dropout=0.1,
+        attention_dropout=0.0,
+        droppath=0.0,
+    ):
+        super().__init__()
+
+        self.attn = Attention(
+            embed_dim, num_heads, qkv_bias, dropout, attention_dropout
+        )
+        self.drop_path = DropPath(droppath) if droppath > 0.0 else Identity()
+
+        self.mlp = Mlp(embed_dim, mlp_ratio, dropout)
+        self.resweight = self.create_parameter(
+            shape=(1,), attr=ParamAttr(initializer=Constant(0.0))
+        )
+
+    def forward(self, x):
+
+        h = x
+        x = self.attn(x) * self.resweight
+        x = self.drop_path(x)
+        x = h + x
+
+        h = x
+        x = self.mlp(x) * self.resweight
+        x = self.drop_path(x)
+        x = x + h
+
+        return x
+
+
 class Transformer(nn.Layer):
     """Transformer block for MobileViTBlock"""
 
@@ -561,14 +640,17 @@ class Transformer(nn.Layer):
         dropout=0.1,
         attention_dropout=0.0,
         droppath=0.0,
+        rezero=False,
     ):
         super().__init__()
         depth_decay = [x.item() for x in paddle.linspace(0, droppath, depth)]
 
+        encoder_layer = ReZeroEncoderLayer if rezero else EncoderLayer
+
         layer_list = []
         for i in range(depth):
             layer_list.append(
-                EncoderLayer(
+                encoder_layer(
                     embed_dim,
                     num_heads,
                     qkv_bias,
@@ -643,6 +725,7 @@ class MobileViTBlock(nn.Layer):
         attention_dropout=0.0,
         droppath=0.0,
         patch_size=(2, 2),
+        rezero=False,
     ):
         super().__init__()
         self.patch_h, self.patch_w = patch_size
@@ -662,6 +745,7 @@ class MobileViTBlock(nn.Layer):
             dropout=dropout,
             attention_dropout=attention_dropout,
             droppath=droppath,
+            rezero=rezero,
         )
 
         # fusion
@@ -770,6 +854,7 @@ class MobileViTV1(nn.Layer):
         pretrained=False,
         use_ssld=False,
         arch_name=None,
+        rezero=False,
     ):
         super().__init__()
 
@@ -792,18 +877,23 @@ class MobileViTV1(nn.Layer):
         self.mv2_block_5 = MobileV2Block(
             dims[4], dims[5], stride=2, expansion=mv2_expansion
         )
-        self.mvit_block_1 = MobileViTBlock(dims[5], hidden_dims[0], depth=2)
+        self.mvit_block_1 = MobileViTBlock(
+            dims[5], hidden_dims[0], depth=2, rezero=rezero
+        )
 
         self.mv2_block_6 = MobileV2Block(
             dims[5], dims[6], stride=2, expansion=mv2_expansion
         )
-        self.mvit_block_2 = MobileViTBlock(dims[6], hidden_dims[1], depth=4)
+        self.mvit_block_2 = MobileViTBlock(
+            dims[6], hidden_dims[1], depth=4, rezero=rezero
+        )
 
         self.mv2_block_7 = MobileV2Block(
             dims[6], dims[7], stride=2, expansion=mv2_expansion
         )
-        self.mvit_block_3 = MobileViTBlock(dims[7], hidden_dims[2], depth=3)
-        self.conv1x1 = ConvBnAct(dims[7], dims[8], kernel_size=1)
+        self.mvit_block_3 = MobileViTBlock(
+            dims[7], hidden_dims[2], depth=3, rezero=rezero
+        )
 
         if arch_name is not None:
             self._load_pretrained(pretrained, MODEL_URLS[arch_name], use_ssld=use_ssld)
@@ -833,8 +923,6 @@ class MobileViTV1(nn.Layer):
         x = self.mvit_block_3(x)
         return_list.append(x)
 
-        x = self.conv1x1(x)  # [16, 96, 16, 16]
-
         return return_list
 
     @property
@@ -855,7 +943,7 @@ class MobileViTV1(nn.Layer):
 
 
 def MobileViT_XXS(pretrained=False, use_ssld=False, **kwargs):
-    model = MobileViT(
+    model = MobileViTV1(
         in_channels=3,
         dims=[16, 16, 24, 24, 24, 48, 64, 80, 320],
         hidden_dims=[64, 80, 96],
@@ -868,7 +956,7 @@ def MobileViT_XXS(pretrained=False, use_ssld=False, **kwargs):
 
 
 def MobileViT_XS(pretrained=False, use_ssld=False, **kwargs):
-    model = MobileViT(
+    model = MobileViTV1(
         in_channels=3,
         dims=[16, 32, 48, 48, 48, 64, 80, 96, 384],
         hidden_dims=[96, 120, 144],
@@ -880,7 +968,7 @@ def MobileViT_XS(pretrained=False, use_ssld=False, **kwargs):
 
 
 def MobileViT_S(pretrained=False, use_ssld=False, **kwargs):
-    model = MobileViT(
+    model = MobileViTV1(
         in_channels=3,
         dims=[16, 32, 64, 64, 64, 96, 128, 160, 640],
         hidden_dims=[144, 192, 240],
