@@ -11,6 +11,7 @@ LearningRate:
     steps: 500
 
 OptimizerBuilder:
+  clip_grad_by_norm: 0.618
   optimizer:
     momentum: 0.9
     type: Momentum

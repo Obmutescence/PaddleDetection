@@ -218,10 +218,19 @@ class alpha_DIouLoss(DIouLoss):
         use_complete_iou_loss (bool): whether to use complete iou loss
     """
 
-    def __init__(self, loss_weight=1.0, eps=1e-10, use_complete_iou_loss=True, alpha=3):
+    def __init__(
+        self,
+        loss_weight=1.0,
+        eps=1e-10,
+        use_complete_iou_loss=True,
+        alpha=3,
+        reduction="mean",
+    ):
         super(alpha_DIouLoss, self).__init__(loss_weight=loss_weight, eps=eps)
         self.use_complete_iou_loss = use_complete_iou_loss
         self.alpha = alpha
+        self.reduction = reduction
+        self.reduce_func = paddle.sum if "sum" == self.reduction else paddle.mean
 
     def __call__(self, pbox, gbox, iou_weight=1.0):
         x1, y1, x2, y2 = paddle.split(pbox, num_or_sections=4, axis=-1)
@@ -277,7 +286,8 @@ class alpha_DIouLoss(DIouLoss):
             ciou_term = alpha * ar_loss
 
         # diou = paddle.mean((1 - iouk + ciou_term + diou_term) * iou_weight)
-        diou = paddle.mean(
+
+        diou = self.reduce_func(
             (
                 1
                 - paddle.pow(iouk, self.alpha)
