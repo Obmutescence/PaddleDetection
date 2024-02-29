@@ -197,6 +197,10 @@ class WHHead(nn.Layer):
         return out
 
 
+def clip(value, min_value=0, max_value=10000):
+    return max(min_value, min(value, max_value))
+
+
 @register
 class TTFHead(nn.Layer):
     """
@@ -245,6 +249,9 @@ class TTFHead(nn.Layer):
         lite_head=False,
         norm_type="bn",
         ags_module=False,
+        hm_decay_iter=-1,  # -1 的时候, 不衰减, 可以先 2e
+        hm_init_weight=4,
+        wh_init_weight=1,
     ):
         super(TTFHead, self).__init__()
         self.in_channels = in_channels
@@ -271,6 +278,12 @@ class TTFHead(nn.Layer):
         self.wh_offset_base = wh_offset_base
         self.down_ratio = down_ratio
         self.ags_module = ags_module
+
+        # ------- 给 hm_loss 进行优先衰减 -------
+        self.hm_decay_iter = hm_decay_iter  # 约为2个epoch
+        self.iter = 0
+        self.hm_init_weight = hm_init_weight
+        self.wh_init_weight = wh_init_weight
 
     @classmethod
     def from_config(cls, cfg, input_shape):
@@ -335,6 +348,22 @@ class TTFHead(nn.Layer):
         mask.stop_gradient = True
         wh_loss = self.wh_loss(pred_boxes, boxes, iou_weight=mask.unsqueeze(1))
         wh_loss = wh_loss / avg_factor
+
+        # ------ 用于给 hm_loss 优先优化 ------
+        hm_loss_weight = 1 + (
+            clip(self.hm_decay_iter - self.iter, min_value=0)
+            / self.hm_decay_iter
+            * self.hm_init_weight
+        )
+        self.iter += 1
+
+        wh_init_weight = (
+            self.wh_init_weight / (self.wh_init_weight + hm_loss_weight) * 2
+        )
+        hm_loss_weight = hm_loss_weight / (self.wh_init_weight + hm_loss_weight) * 2
+
+        wh_loss *= wh_init_weight
+        hm_loss *= hm_loss_weight
 
         ttf_loss = {"hm_loss": hm_loss, "wh_loss": wh_loss}
         return ttf_loss

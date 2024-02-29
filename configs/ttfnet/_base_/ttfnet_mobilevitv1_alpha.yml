@@ -36,7 +36,8 @@ TTFHead:
     loss_weight: 5.
     alpha: 3
     reduction: sum
-
+  hm_decay_iter: -1 # 不先优化 hm_loss
+  
 BBoxPostProcess:
   decode:
     name: TTFBox
