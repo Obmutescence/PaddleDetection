@@ -20,6 +20,7 @@ DarkNet:
 TTFFPN:
   planes: [256, 128, 64]
   shortcut_num: [3, 2, 1]
+  dcnv3_neck: false
   encoder_layer:
     name: TTFTransformerLayer
     d_model: 1024

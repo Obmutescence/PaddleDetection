@@ -29,6 +29,7 @@ from ppdet.core.workspace import register, serializable
 from ppdet.modeling.bbox_utils import delta2bbox
 from . import ops
 from .initializer import xavier_uniform_, constant_
+from .dcnv3 import DCNv3_paddle
 
 from paddle.vision.ops import DeformConv2D
 

@@ -25,7 +25,12 @@ from paddle.regularizer import L2Decay
 
 from ppdet.modeling.ops import batch_norm
 from ppdet.core.workspace import register, serializable
-from ppdet.modeling.layers import DeformableConvV2, ConvNormLayer, LiteConv
+from ppdet.modeling.layers import (
+    DeformableConvV2,
+    ConvNormLayer,
+    LiteConv,
+    DCNv3_paddle,
+)
 from ..shape_spec import ShapeSpec
 from ..initializer import xavier_uniform_, linear_init_
 from ..layers import MultiHeadAttention
@@ -58,6 +63,37 @@ class Upsample(nn.Layer):
         bn = self.bn(dcn)
         relu = F.relu(bn)
         out = F.interpolate(relu, scale_factor=2.0, mode="bilinear")
+        return out
+
+
+class UpsampleDCNv3(nn.Layer):
+    def __init__(self, ch_in, ch_out, norm_type="bn"):
+        super(UpsampleDCNv3, self).__init__()
+        # fan_in = ch_in * 3 * 3
+        # stdv = 1.0 / math.sqrt(fan_in)
+        self.dcn = DCNv3_paddle(
+            ch_in,
+            # ch_out,
+            kernel_size=3,
+            # weight_attr=ParamAttr(initializer=Uniform(-stdv, stdv)),
+            # bias_attr=ParamAttr(
+            #     initializer=Constant(0), regularizer=L2Decay(0.0), learning_rate=2.0
+            # ),
+            # lr_scale=2.0,
+            # regularizer=L2Decay(0.0),
+        )
+        self.bn = batch_norm(ch_in, norm_type=norm_type, initializer=Constant(1.0))
+        self.conv = ConvNormLayer(
+            ch_in, ch_out, filter_size=3, stride=1, norm_type="sync_bn"
+        )
+
+    def forward(self, feat):
+        dcn = self.dcn(feat)
+        dcn = dcn.transpose([0, 3, 1, 2])
+        bn = self.bn(dcn)
+        relu = F.relu(bn)
+        out = F.interpolate(relu, scale_factor=2.0, mode="bilinear")
+        out = self.conv(out)
         return out
 
 
@@ -288,6 +324,7 @@ class TTFFPN(nn.Layer):
         shortcut_num=[3, 2, 1],
         norm_type="bn",
         lite_neck=False,
+        dcnv3_neck=False,
         fusion_method="add",
         use_encoder_idx=[-1],
         num_encoder_layers=1,
@@ -316,6 +353,7 @@ class TTFFPN(nn.Layer):
         for i, out_c in enumerate(self.planes):
             in_c = self.ch_in[i] if i == 0 else self.upper_list[-1]
             upsample_module = LiteUpsample if lite_neck else Upsample
+            upsample_module = UpsampleDCNv3 if dcnv3_neck else upsample_module
             upsample = self.add_sublayer(
                 "upsample." + str(i), upsample_module(in_c, out_c, norm_type=norm_type)
             )
