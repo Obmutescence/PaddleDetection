@@ -39,6 +39,69 @@ from .ccanet import CrissCrossAttention
 __all__ = ["TTFFPN"]
 
 
+class ConvBNLayer(nn.Layer):
+    def __init__(
+        self,
+        ch_in,
+        ch_out,
+        filter_size=3,
+        stride=1,
+        groups=1,
+        padding=0,
+        norm_type="bn",
+        norm_decay=0.0,
+        act="leaky",
+        freeze_norm=False,
+        data_format="NCHW",
+        name="",
+    ):
+        """
+        conv + bn + activation layer
+
+        Args:
+            ch_in (int): input channel
+            ch_out (int): output channel
+            filter_size (int): filter size, default 3
+            stride (int): stride, default 1
+            groups (int): number of groups of conv layer, default 1
+            padding (int): padding size, default 0
+            norm_type (str): batch norm type, default bn
+            norm_decay (str): decay for weight and bias of batch norm layer, default 0.
+            act (str): activation function type, default 'leaky', which means leaky_relu
+            freeze_norm (bool): whether to freeze norm, default False
+            data_format (str): data format, NCHW or NHWC
+        """
+        super(ConvBNLayer, self).__init__()
+
+        self.conv = nn.Conv2D(
+            in_channels=ch_in,
+            out_channels=ch_out,
+            kernel_size=filter_size,
+            stride=stride,
+            padding=padding,
+            groups=groups,
+            data_format=data_format,
+            bias_attr=False,
+        )
+        self.batch_norm = batch_norm(
+            ch_out,
+            norm_type=norm_type,
+            norm_decay=norm_decay,
+            freeze_norm=freeze_norm,
+            data_format=data_format,
+        )
+        self.act = act
+
+    def forward(self, inputs):
+        out = self.conv(inputs)
+        out = self.batch_norm(out)
+        if self.act == "leaky":
+            out = F.leaky_relu(out, 0.1)
+        else:
+            out = getattr(F, self.act)(out)
+        return out
+
+
 class Upsample(nn.Layer):
     def __init__(self, ch_in, ch_out, norm_type="bn"):
         super(Upsample, self).__init__()
@@ -333,6 +396,7 @@ class TTFFPN(nn.Layer):
         pe_temperature=10000,
         eval_size=None,
         feat_strides=[4, 8, 16, 32],
+        num_classes=80,  # COCO 多分类
     ):
         super(TTFFPN, self).__init__()
         self.planes = planes
@@ -391,6 +455,12 @@ class TTFFPN(nn.Layer):
                 for _ in range(len(use_encoder_idx))
             ]
         )
+
+        # 在这里添加辅助多分类器
+        self.conv1x1 = ConvBNLayer(self.ch_in[0], hidden_dim, filter_size=1)
+        self.avg_pool = nn.AdaptiveAvgPool2D(1)
+        self.linear = nn.Conv2D(hidden_dim, num_classes, kernel_size=1)
+
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -454,6 +524,9 @@ class TTFFPN(nn.Layer):
 
         feat = inputs[-1]
 
+        # 辅助多分类器
+        aux_mul_cls = self.linear(self.avg_pool(self.conv1x1(feat))).squeeze_([2, 3])
+
         for i, out_c in enumerate(self.planes):
             feat = self.upsample_list[i](feat)
             if i < self.shortcut_len:
@@ -462,7 +535,7 @@ class TTFFPN(nn.Layer):
                     feat = feat + shortcut
                 else:
                     feat = paddle.concat([feat, shortcut], axis=1)
-        return feat
+        return feat, aux_mul_cls
 
     @classmethod
     def from_config(cls, cfg, input_shape):
