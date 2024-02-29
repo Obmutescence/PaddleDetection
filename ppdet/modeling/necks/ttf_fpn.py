@@ -174,6 +174,7 @@ class TTFTransformerLayer(nn.Layer):
         attn_dropout=None,
         act_dropout=None,
         normalize_before=False,
+        rezero=False,
     ):
         super(TTFTransformerLayer, self).__init__()
         attn_dropout = dropout if attn_dropout is None else attn_dropout
@@ -186,11 +187,20 @@ class TTFTransformerLayer(nn.Layer):
         self.dropout = nn.Dropout(act_dropout, mode="upscale_in_train")
         self.linear2 = nn.Linear(dim_feedforward, d_model)
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(dropout, mode="upscale_in_train")
         self.dropout2 = nn.Dropout(dropout, mode="upscale_in_train")
         self.activation = getattr(F, activation)
+
+        self.rezero = rezero
+        if not rezero:
+            self.norm1 = nn.LayerNorm(d_model)
+            self.norm2 = nn.LayerNorm(d_model)
+            self.resweight = 1
+        else:
+            self.resweight = self.create_parameter(
+                shape=(1,), attr=ParamAttr(initializer=Constant(0.0))
+            )
+
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -203,21 +213,24 @@ class TTFTransformerLayer(nn.Layer):
 
     def forward(self, src, src_mask=None, pos_embed=None):
         residual = src
-        if self.normalize_before:
+        if not self.rezero and self.normalize_before:
             src = self.norm1(src)
         q = k = self.with_pos_embed(src, pos_embed)
         src = self.self_attn(q, k, value=src, attn_mask=src_mask)
+        src *= self.resweight
 
         src = residual + self.dropout1(src)
-        if not self.normalize_before:
+        if not self.rezero and not self.normalize_before:
             src = self.norm1(src)
 
         residual = src
-        if self.normalize_before:
+        if not self.rezero and self.normalize_before:
             src = self.norm2(src)
         src = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src *= self.resweight
+
         src = residual + self.dropout2(src)
-        if not self.normalize_before:
+        if not self.rezero and not self.normalize_before:
             src = self.norm2(src)
         return src
 

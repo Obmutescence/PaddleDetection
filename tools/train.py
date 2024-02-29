@@ -39,7 +39,7 @@ from ppdet.slim import build_slim_model
 from ppdet.utils.cli import ArgsParser, merge_args
 import ppdet.utils.check as check
 from ppdet.utils.logger import setup_logger
-logger = setup_logger('train')
+logger = setup_logger('train', output="log/train.log")
 
 
 def parse_args():

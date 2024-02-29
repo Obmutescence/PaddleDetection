@@ -1,5 +1,8 @@
 architecture: TTFNet
 # pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/DarkNet53_pretrained.pdparams
+# norm_type: sync_bn
+# use_ema: true
+# ema_decay: 0.9998
 
 TTFNet:
   backbone: MobileViTV1 
@@ -22,7 +25,8 @@ TTFFPN:
     dim_feedforward: 1024
     dropout: 0.
     activation: 'gelu'
-
+    rezero: false
+    
 TTFHead:
   hm_loss:
     name: CTFocalLoss
