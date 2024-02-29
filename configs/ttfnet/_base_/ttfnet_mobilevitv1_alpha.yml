@@ -1,8 +1,8 @@
 architecture: TTFNet
 # pretrain_weights: https://paddledet.bj.bcebos.com/models/pretrained/DarkNet53_pretrained.pdparams
-# norm_type: sync_bn
-# use_ema: true
-# ema_decay: 0.9998
+norm_type: sync_bn
+use_ema: true
+ema_decay: 0.9998
 
 TTFNet:
   backbone: MobileViTV1 
