@@ -1,23 +1,15 @@
-worker_num: 4
+worker_num: 8
 TrainReader:
   sample_transforms:
   - Decode: {}
-  # - RandomFlip: {prob: 0.5}
-  # - Resize: {interp: 1, target_size: [512, 512], keep_ratio: False}
-  - RandomDistort: {prob: 0.8}
-  - RandomExpand: {fill_value: [123.675, 116.28, 103.53]}
-  - RandomCrop: {prob: 0.8}
-  - RandomFlip: {}
-  # - NormalizeImage: {mean: [123.675, 116.28, 103.53], std: [58.395, 57.12, 57.375], is_scale: false}
-  # - Permute: {}
-  batch_transforms:
-  - BatchRandomResize: {target_size: [480, 512, 544, 576, 608, 640, 640, 640, 672, 704, 736, 768, 800], random_size: True, random_interp: True, keep_ratio: False}
-  - NormalizeImage: {mean: [0., 0., 0.], std: [1., 1., 1.], norm_type: none}
-  # - Gt2TTFTarget: {down_ratio: 4}
-  - Gt2TTFTarget_MULTI_CLS: {down_ratio: 4}
+  - RandomFlip: {prob: 0.5}
+  - Resize: {interp: 1, target_size: [512, 512], keep_ratio: False}
+  - NormalizeImage: {mean: [123.675, 116.28, 103.53], std: [58.395, 57.12, 57.375], is_scale: false}
   - Permute: {}
+  batch_transforms:
+  - Gt2TTFTarget: {down_ratio: 4}
   - PadBatch: {pad_to_stride: 32}
-  batch_size: 16
+  batch_size: 32
   shuffle: true
   drop_last: true
   use_shared_memory: true
@@ -25,8 +17,8 @@ TrainReader:
 EvalReader:
   sample_transforms:
   - Decode: {}
-  - Resize: {target_size: [512, 512], keep_ratio: False, interp: 2}
-  - NormalizeImage: {mean: [0., 0., 0.], std: [1., 1., 1.], norm_type: none}
+  - Resize: {interp: 1, target_size: [512, 512], keep_ratio: False}
+  - NormalizeImage: {is_scale: false, mean: [123.675, 116.28, 103.53], std: [58.395, 57.12, 57.375]}
   - Permute: {}
   batch_size: 32
   drop_last: false
@@ -34,8 +26,8 @@ EvalReader:
 TestReader:
   sample_transforms:
   - Decode: {}
-  - Resize: {target_size: [640, 640], keep_ratio: False, interp: 2}
-  - NormalizeImage: {mean: [0., 0., 0.], std: [1., 1., 1.], norm_type: none}
+  - Resize: {interp: 1, target_size: [512, 512], keep_ratio: False}
+  - NormalizeImage: {is_scale: false, mean: [123.675, 116.28, 103.53], std: [58.395, 57.12, 57.375]}
   - Permute: {}
   batch_size: 32
   drop_last: false
