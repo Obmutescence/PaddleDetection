@@ -2,6 +2,16 @@ import os
 
 import paddle
 import paddle.nn as nn
+from paddle.jit import to_static
+
+
+@to_static(full_graph=True)
+def Inf(B, H, W):
+    inf_tensor = paddle.full(shape=(H,), fill_value=float("inf"), dtype="float32")
+    return -paddle.tile(
+        paddle.diag(inf_tensor, 0).unsqueeze(0),
+        [B * W, 1, 1],
+    )
 
 
 class CrissCrossAttention(nn.Layer):
@@ -14,8 +24,8 @@ class CrissCrossAttention(nn.Layer):
         self.gamma = self.create_parameter(
             shape=(1,), default_initializer=nn.initializer.Constant(0)
         )
-        self.inf_tensor = paddle.full(shape=(1,), fill_value=float("inf"))
 
+    @to_static(full_graph=True)
     def forward(self, x):
         b, c, h, w = paddle.shape(x)
         proj_q = self.q_conv(x)
@@ -35,7 +45,7 @@ class CrissCrossAttention(nn.Layer):
         proj_v_w = proj_v.transpose([0, 2, 1, 3]).reshape([b * h, -1, w])
 
         energy_h = (
-            (paddle.bmm(proj_q_h, proj_k_h) + self.Inf(b, h, w))
+            (paddle.bmm(proj_q_h, proj_k_h) + Inf(b, h, w))
             .reshape([b, w, h, h])
             .transpose([0, 2, 1, 3])
         )
@@ -55,12 +65,6 @@ class CrissCrossAttention(nn.Layer):
             .transpose([0, 2, 1, 3])
         )
         return self.gamma * (out_h + out_w) + x
-
-    def Inf(self, B, H, W):
-        return -paddle.tile(
-            paddle.diag(paddle.tile(self.inf_tensor, [H]), 0).unsqueeze(0),
-            [B * W, 1, 1],
-        )
 
 
 class Activation(nn.Layer):
@@ -251,11 +255,43 @@ class RCCAModule(nn.Layer):
         return output
 
 
+class RCCAWrapper(nn.Layer):
+    def __init__(self, in_channels, out_channels, recurrence=2):
+        super().__init__()
+        inter_channels = in_channels // 4
+        self.recurrence = recurrence
+        self.conva = ConvBNLeakyReLU(
+            in_channels, inter_channels, 3, padding=1, bias_attr=False
+        )
+        self.cca = CrissCrossAttention(inter_channels)
+        self.convb = ConvBNLeakyReLU(
+            inter_channels * 2 + in_channels,
+            out_channels,
+            3,
+            padding=1,
+            bias_attr=False,
+        )
+
+    def forward(self, x):
+        conva = self.conva(x)
+        feat = conva
+        for i in range(self.recurrence):
+            feat = self.cca(feat)
+        feat = self.convb(paddle.concat([x, conva, feat], axis=1))
+        return feat
+
+
 if __name__ == "__main__":
 
     # test CCA
-    x = paddle.rand([32, 64, 256, 256])
-    m = CrissCrossAttention(64)
+    x = paddle.rand([16, 64, 256, 256])
+    # m = CrissCrossAttention(64)
+    # y = m(x)
+
+    # print(y.shape)
+
+    # test RCCAModule
+    m = RCCAWrapper(64, 32, 3)
     y = m(x)
 
     print(y.shape)

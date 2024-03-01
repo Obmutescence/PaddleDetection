@@ -34,9 +34,50 @@ from ppdet.modeling.layers import (
 from ..shape_spec import ShapeSpec
 from ..initializer import xavier_uniform_, linear_init_
 from ..layers import MultiHeadAttention
-from .ccanet import CrissCrossAttention
+from .ccanet import CrissCrossAttention, RCCAWrapper
+from ..backbones.cspresnet import RepVggBlock
+from ..backbones.csp_darknet import BaseConv
+from paddle.jit import to_static
 
 __all__ = ["TTFFPN"]
+
+
+class CSPRepLayer(nn.Layer):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        num_blocks=3,
+        expansion=1.0,
+        bias=False,
+        act="silu",
+    ):
+        super(CSPRepLayer, self).__init__()
+        hidden_channels = int(out_channels * expansion)
+        self.conv1 = BaseConv(
+            in_channels, hidden_channels, ksize=1, stride=1, bias=bias, act=act
+        )
+        self.conv2 = BaseConv(
+            in_channels, hidden_channels, ksize=1, stride=1, bias=bias, act=act
+        )
+        self.bottlenecks = nn.Sequential(
+            *[
+                RepVggBlock(hidden_channels, hidden_channels, act=act)
+                for _ in range(num_blocks)
+            ]
+        )
+        if hidden_channels != out_channels:
+            self.conv3 = BaseConv(
+                hidden_channels, out_channels, ksize=1, stride=1, bias=bias, act=act
+            )
+        else:
+            self.conv3 = nn.Identity()
+
+    def forward(self, x):
+        x_1 = self.conv1(x)
+        x_1 = self.bottlenecks(x_1)
+        x_2 = self.conv2(x)
+        return self.conv3(x_1 + x_2)
 
 
 class ConvBNLayer(nn.Layer):
@@ -219,9 +260,17 @@ class LiteUpsample(nn.Layer):
 
 class ShortCut(nn.Layer):
     def __init__(
-        self, layer_num, ch_in, ch_out, norm_type="bn", lite_neck=False, name=None
+        self,
+        layer_num,
+        ch_in,
+        ch_out,
+        norm_type="bn",
+        lite_neck=False,
+        name=None,
+        use_cca=False,
     ):
         super(ShortCut, self).__init__()
+        self.use_cca = use_cca
         shortcut_conv = nn.Sequential()
         for i in range(layer_num):
             fan_out = 3 * 3 * ch_out
@@ -239,9 +288,11 @@ class ShortCut(nn.Layer):
                     ),
                 )
             else:
-                shortcut_conv.add_sublayer(
-                    shortcut_name,
-                    nn.Conv2D(
+                if self.use_cca:
+                    conv_model = RCCAWrapper(in_channels, ch_out)
+                    # conv_model = CrissCrossAttention(in_channels)
+                else:
+                    conv_model = nn.Conv2D(
                         in_channels=in_channels,
                         out_channels=ch_out,
                         kernel_size=3,
@@ -250,7 +301,11 @@ class ShortCut(nn.Layer):
                         bias_attr=ParamAttr(
                             learning_rate=2.0, regularizer=L2Decay(0.0)
                         ),
-                    ),
+                    )
+
+                shortcut_conv.add_sublayer(
+                    shortcut_name,
+                    conv_model,
                 )
                 if i < layer_num - 1:
                     shortcut_conv.add_sublayer(shortcut_name + ".act", nn.ReLU())
@@ -314,6 +369,7 @@ class TTFTransformerLayer(nn.Layer):
     def with_pos_embed(tensor, pos_embed):
         return tensor if pos_embed is None else tensor + pos_embed
 
+    @to_static(full_graph=True)
     def forward(self, src, src_mask=None, pos_embed=None):
         residual = src
         if not self.rezero and self.normalize_before:
@@ -398,6 +454,9 @@ class TTFFPN(nn.Layer):
         feat_strides=[4, 8, 16, 32],
         num_classes=80,  # COCO 多分类
         aux_multi_cls=False,
+        pan=False,
+        act="silu",
+        use_cca=False,
     ):
         super(TTFFPN, self).__init__()
         self.planes = planes
@@ -411,6 +470,8 @@ class TTFFPN(nn.Layer):
         self.pe_temperature = pe_temperature
         self.eval_size = eval_size
         self.feat_strides = feat_strides
+
+        self.pan = pan
 
         self.upsample_list = []
         self.shortcut_list = []
@@ -433,6 +494,7 @@ class TTFFPN(nn.Layer):
                         norm_type=norm_type,
                         lite_neck=lite_neck,
                         name="shortcut." + str(i),
+                        use_cca=use_cca,
                     ),
                 )
                 self.shortcut_list.append(shortcut)
@@ -463,6 +525,24 @@ class TTFFPN(nn.Layer):
             self.conv1x1 = ConvBNLayer(self.ch_in[0], hidden_dim, filter_size=1)
             self.avg_pool = nn.AdaptiveAvgPool2D(1)
             self.linear = nn.Conv2D(hidden_dim, num_classes, kernel_size=1)
+
+        if self.pan:
+            # 路径聚合, 从大特征图向小特征图走, 只是feature map 不再减小
+            self.downsample_convs = nn.LayerList()
+            self.pan_blocks = nn.LayerList()
+            for idx in range(len(in_channels) - 1):
+                self.downsample_convs.append(
+                    BaseConv(hidden_dim, hidden_dim, 3, stride=2, act=act)
+                )
+                self.pan_blocks.append(
+                    CSPRepLayer(
+                        hidden_dim * 2,
+                        hidden_dim,
+                        round(3 * depth_mult),
+                        act=act,
+                        expansion=expansion,
+                    )
+                )
 
         self._reset_parameters()
 
@@ -535,6 +615,8 @@ class TTFFPN(nn.Layer):
         else:
             aux_mul_cls = None
 
+        # feature map size 从 小 到 大
+        inner_outs = []
         for i, out_c in enumerate(self.planes):
             feat = self.upsample_list[i](feat)
             if i < self.shortcut_len:
@@ -543,6 +625,18 @@ class TTFFPN(nn.Layer):
                     feat = feat + shortcut
                 else:
                     feat = paddle.concat([feat, shortcut], axis=1)
+            inner_outs.insert(0, feat)
+
+        # TODO: Copy From RT-DETR
+        # # feature map size 再从大 -> 小走一次, 只是size不减小
+        # for idx in range(len(self.ch_in) - 1):
+
+        #     feat_height = inner_outs[idx]
+        #     downsample_feat = self.downsample_convs[idx](feat)
+        #     out = self.pan_blocks[idx](
+        #         paddle.concat([downsample_feat, feat_height], axis=1)
+        #     )
+
         return feat, aux_mul_cls
 
     @classmethod
