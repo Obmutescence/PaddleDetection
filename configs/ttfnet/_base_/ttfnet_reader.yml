@@ -13,7 +13,8 @@ TrainReader:
   batch_transforms:
   - BatchRandomResize: {target_size: [480, 512, 544, 576, 608, 640, 640, 640, 672, 704, 736, 768, 800], random_size: True, random_interp: True, keep_ratio: False}
   - NormalizeImage: {mean: [0., 0., 0.], std: [1., 1., 1.], norm_type: none}
-  - Gt2TTFTarget: {down_ratio: 4}
+  # - Gt2TTFTarget: {down_ratio: 4}
+  - Gt2TTFTarget_MULTI_CLS: {down_ratio: 4}
   - Permute: {}
   - PadBatch: {pad_to_stride: 32}
   batch_size: 16

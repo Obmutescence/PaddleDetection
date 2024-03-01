@@ -69,10 +69,10 @@ class TTFNet(BaseArch):
 
     def _forward(self):
         body_feats = self.backbone(self.inputs)
-        body_feats, mul_cls = self.neck(body_feats)
+        body_feats, aux_mul_cls = self.neck(body_feats)
         hm, wh = self.ttf_head(body_feats)
         if self.training:
-            return hm, wh
+            return hm, wh, aux_mul_cls
         else:
             bbox, bbox_num = self.post_process(
                 hm, wh, self.inputs["im_shape"], self.inputs["scale_factor"]
@@ -86,8 +86,12 @@ class TTFNet(BaseArch):
         heatmap = self.inputs["ttf_heatmap"]
         box_target = self.inputs["ttf_box_target"]
         reg_weight = self.inputs["ttf_reg_weight"]
-        hm, wh = self._forward()
-        head_loss = self.ttf_head.get_loss(hm, wh, heatmap, box_target, reg_weight)
+        multi_cls_targe = self.inputs["ttf_multi_cls_targe"]
+        hm, wh, aux_mul_cls = self._forward()
+
+        head_loss = self.ttf_head.get_loss(
+            hm, wh, aux_mul_cls, heatmap, box_target, reg_weight, multi_cls_targe
+        )
         loss.update(head_loss)
         total_loss = paddle.add_n(list(loss.values()))
         loss.update({"loss": total_loss})

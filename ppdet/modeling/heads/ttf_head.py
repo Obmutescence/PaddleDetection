@@ -231,7 +231,7 @@ class TTFHead(nn.Layer):
     """
 
     __shared__ = ["num_classes", "down_ratio", "norm_type"]
-    __inject__ = ["hm_loss", "wh_loss"]
+    __inject__ = ["hm_loss", "wh_loss", "mul_cls_loss"]
 
     def __init__(
         self,
@@ -243,6 +243,7 @@ class TTFHead(nn.Layer):
         wh_head_conv_num=2,
         hm_loss="CTFocalLoss",
         wh_loss="GIoULoss",
+        mul_cls_loss=None,
         wh_offset_base=16.0,
         down_ratio=4,
         dcn_head=False,
@@ -274,6 +275,7 @@ class TTFHead(nn.Layer):
         )
         self.hm_loss = hm_loss
         self.wh_loss = wh_loss
+        self.mul_cls_loss = mul_cls_loss
 
         self.wh_offset_base = wh_offset_base
         self.down_ratio = down_ratio
@@ -315,7 +317,19 @@ class TTFHead(nn.Layer):
         score = paddle.gather_nd(score, index)
         return score
 
-    def get_loss(self, pred_hm, pred_wh, target_hm, box_target, target_weight):
+    def get_loss(
+        self,
+        pred_hm,
+        pred_wh,
+        pred_mul_cls,
+        target_hm,
+        box_target,
+        target_weight,
+        multi_cls_targe,
+    ):
+        # multi_cls_targe 是多分类标签
+        # pred_mul_cls 是多分类预测张量, shape == [B, num_classes]
+
         pred_hm = paddle.clip(F.sigmoid(pred_hm), 1e-4, 1 - 1e-4)
         hm_loss = self.hm_loss(pred_hm, target_hm)
         H, W = target_hm.shape[2:]
@@ -349,21 +363,31 @@ class TTFHead(nn.Layer):
         wh_loss = self.wh_loss(pred_boxes, boxes, iou_weight=mask.unsqueeze(1))
         wh_loss = wh_loss / avg_factor
 
-        # ------ 用于给 hm_loss 优先优化 ------
-        hm_loss_weight = 1 + (
-            clip(self.hm_decay_iter - self.iter, min_value=0)
-            / self.hm_decay_iter
-            * self.hm_init_weight
-        )
-        self.iter += 1
+        # ------ 多标签分类 ------
+        if self.mul_cls_loss is None:
+            ttf_loss = {"hm_loss": hm_loss, "wh_loss": wh_loss}
+        else:
+            mlc_loss = self.mul_cls_loss(pred_mul_cls, multi_cls_targe)
+            ttf_loss = {
+                "hm_loss": hm_loss,
+                "wh_loss": wh_loss,
+                "aux_mlc_loss": mlc_loss,
+            }
 
-        wh_init_weight = (
-            self.wh_init_weight / (self.wh_init_weight + hm_loss_weight) * 2
-        )
-        hm_loss_weight = hm_loss_weight / (self.wh_init_weight + hm_loss_weight) * 2
+        # # ------ 用于给 hm_loss 优先优化 ------
+        # hm_loss_weight = 1 + (
+        #     clip(self.hm_decay_iter - self.iter, min_value=0)
+        #     / self.hm_decay_iter
+        #     * self.hm_init_weight
+        # )
+        # self.iter += 1
 
-        wh_loss *= wh_init_weight
-        hm_loss *= hm_loss_weight
+        # wh_init_weight = (
+        #     self.wh_init_weight / (self.wh_init_weight + hm_loss_weight) * 2
+        # )
+        # hm_loss_weight = hm_loss_weight / (self.wh_init_weight + hm_loss_weight) * 2
 
-        ttf_loss = {"hm_loss": hm_loss, "wh_loss": wh_loss}
+        # wh_loss *= wh_init_weight
+        # hm_loss *= hm_loss_weight
+
         return ttf_loss

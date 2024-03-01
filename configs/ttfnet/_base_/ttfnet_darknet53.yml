@@ -38,6 +38,10 @@ TTFHead:
     name: GIoULoss
     loss_weight: 5.
     reduction: sum
+  mul_cls_loss:
+    name: MultiLabelLoss
+    epsilon: 0.1
+    class_num: 80
   hm_decay_iter: -1 # 不先优化 hm_loss
 
 BBoxPostProcess:

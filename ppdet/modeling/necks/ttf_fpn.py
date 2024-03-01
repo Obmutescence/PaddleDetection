@@ -391,12 +391,13 @@ class TTFFPN(nn.Layer):
         fusion_method="add",
         use_encoder_idx=[-1],
         num_encoder_layers=1,
-        encoder_layer="TTFTransformerLayer",
+        encoder_layer=None,
         hidden_dim=256,
         pe_temperature=10000,
         eval_size=None,
         feat_strides=[4, 8, 16, 32],
         num_classes=80,  # COCO 多分类
+        aux_multi_cls=False,
     ):
         super(TTFFPN, self).__init__()
         self.planes = planes
@@ -457,9 +458,11 @@ class TTFFPN(nn.Layer):
         )
 
         # 在这里添加辅助多分类器
-        self.conv1x1 = ConvBNLayer(self.ch_in[0], hidden_dim, filter_size=1)
-        self.avg_pool = nn.AdaptiveAvgPool2D(1)
-        self.linear = nn.Conv2D(hidden_dim, num_classes, kernel_size=1)
+        self.aux_multi_cls = aux_multi_cls
+        if aux_multi_cls:
+            self.conv1x1 = ConvBNLayer(self.ch_in[0], hidden_dim, filter_size=1)
+            self.avg_pool = nn.AdaptiveAvgPool2D(1)
+            self.linear = nn.Conv2D(hidden_dim, num_classes, kernel_size=1)
 
         self._reset_parameters()
 
@@ -525,7 +528,12 @@ class TTFFPN(nn.Layer):
         feat = inputs[-1]
 
         # 辅助多分类器
-        aux_mul_cls = self.linear(self.avg_pool(self.conv1x1(feat))).squeeze_([2, 3])
+        if self.aux_multi_cls:
+            aux_mul_cls = self.linear(self.avg_pool(self.conv1x1(feat))).squeeze_(
+                [2, 3]
+            )
+        else:
+            aux_mul_cls = None
 
         for i, out_c in enumerate(self.planes):
             feat = self.upsample_list[i](feat)
