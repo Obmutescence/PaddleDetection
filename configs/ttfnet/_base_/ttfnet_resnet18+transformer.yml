@@ -25,6 +25,7 @@ TTFFPN:
   dcnv3_neck: false
   use_encoder_idx: [-1]
   aux_multi_cls: false
+  use_cca: false
   encoder_layer:
     name: TTFTransformerLayer
     d_model: 512
