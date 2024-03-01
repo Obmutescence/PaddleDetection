@@ -684,7 +684,7 @@ class Gt2TTFTarget(BaseOperator):
         self.num_classes = num_classes
         self.alpha = alpha
 
-    def __call__(self, samples, context=None):
+    def __call__(self, samples, context=None, rm_gt_class=True):
         output_size = samples[0]["image"].shape[1]
         feat_size = output_size // self.down_ratio
         for sample in samples:
@@ -747,7 +747,8 @@ class Gt2TTFTarget(BaseOperator):
             sample["ttf_reg_weight"] = reg_weight
             sample.pop("is_crowd", None)
             sample.pop("difficult", None)
-            # sample.pop("gt_class", None)
+            if rm_gt_class:
+                sample.pop("gt_class", None)
             sample.pop("gt_bbox", None)
             sample.pop("gt_score", None)
         return samples
@@ -798,7 +799,7 @@ class Gt2TTFTarget_MULTI_CLS(Gt2TTFTarget):
 
     def __call__(self, samples, context=None):
 
-        samples = super().__call__(samples, context)
+        samples = super().__call__(samples, context, rm_gt_class=False)
 
         for sample in samples:
             mul_cls_target = np.zeros((self.num_classes,), dtype="float32")

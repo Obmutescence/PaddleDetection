@@ -86,7 +86,7 @@ class TTFNet(BaseArch):
         heatmap = self.inputs["ttf_heatmap"]
         box_target = self.inputs["ttf_box_target"]
         reg_weight = self.inputs["ttf_reg_weight"]
-        multi_cls_targe = self.inputs["ttf_multi_cls_targe"]
+        multi_cls_targe = self.inputs.get("ttf_multi_cls_targe", None)
         hm, wh, aux_mul_cls = self._forward()
 
         head_loss = self.ttf_head.get_loss(
