@@ -6,8 +6,8 @@ _BASE_: [
   '_base_/ttfnet_reader.yml',
 ]
 
-# custom_black_list:
-#   - pow
-#   - elementwise_pow
+custom_black_list:
+  - pow
+  - elementwise_pow
 
 weights: output/ttfnet_mobilevitv1_alpha_1x_coco_adamw/model_final

@@ -23,28 +23,34 @@ TTFFPN:
   planes: [256, 128, 64]
   shortcut_num: [3, 2, 1]
   dcnv3_neck: false
-  use_encoder_idx: []
-  # encoder_layer:
-  #   name: TTFTransformerLayer
-  #   d_model: 1024
-  #   nhead: 8
-  #   dim_feedforward: 256
-  #   dropout: 0.
-  #   activation: 'gelu'
-  #   rezero: false
+  use_encoder_idx: [-1]
+  aux_multi_cls: true
+  encoder_layer:
+    name: TTFTransformerLayer
+    d_model: 512
+    nhead: 8
+    dim_feedforward: 256
+    dropout: 0.
+    activation: 'gelu'
+    rezero: false
 
 TTFHead:
   hm_loss:
     name: CTFocalLoss
     loss_weight: 1.
+  # wh_loss:
+  #   name: GIoULoss
+  #   loss_weight: 5.
+  #   reduction: sum
   wh_loss:
-    name: GIoULoss
+    name: alpha_DIouLoss
     loss_weight: 5.
+    alpha: 3
     reduction: sum
-  # mul_cls_loss:
-  #   name: MultiLabelLoss
-  #   epsilon: 0.1
-  #   class_num: 80
+  mul_cls_loss:
+    name: MultiLabelLoss
+    epsilon: 0.13
+    class_num: 80
   hm_decay_iter: -1 # 不先优化 hm_loss
 
 BBoxPostProcess:

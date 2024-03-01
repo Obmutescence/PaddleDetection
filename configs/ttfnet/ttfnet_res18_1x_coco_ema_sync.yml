@@ -5,4 +5,4 @@ _BASE_: [
   '_base_/ttfnet_resnet18.yml',
   '_base_/ttfnet_reader.yml',
 ]
-weights: output/ttfnet_res18_1x_coco/model_final
+weights: output/ttfnet_res18_1x_coco_ema_sync/model_final

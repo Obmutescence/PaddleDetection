@@ -23,15 +23,16 @@ TTFFPN:
   planes: [256, 128, 64]
   shortcut_num: [3, 2, 1]
   dcnv3_neck: false
-  use_encoder_idx: []
-  # encoder_layer:
-  #   name: TTFTransformerLayer
-  #   d_model: 1024
-  #   nhead: 8
-  #   dim_feedforward: 256
-  #   dropout: 0.
-  #   activation: 'gelu'
-  #   rezero: false
+  use_encoder_idx: [-1]
+  aux_multi_cls: false
+  encoder_layer:
+    name: TTFTransformerLayer
+    d_model: 512
+    nhead: 8
+    dim_feedforward: 256
+    dropout: 0.
+    activation: 'gelu'
+    rezero: false
 
 TTFHead:
   hm_loss:

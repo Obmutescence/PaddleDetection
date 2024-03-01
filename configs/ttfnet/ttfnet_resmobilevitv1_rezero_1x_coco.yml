@@ -10,4 +10,4 @@ _BASE_: [
 #   - pow
 #   - elementwise_pow
 
-weights: output/ttfnet_resmobilevitv1_rezero_1x_coco/model_final
+weights: output/ttfnet_resmobilevitv1_rezero_1x_coco_bn/model_final

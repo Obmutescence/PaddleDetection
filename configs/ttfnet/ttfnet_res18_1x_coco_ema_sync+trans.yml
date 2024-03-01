@@ -2,7 +2,7 @@ _BASE_: [
   '../datasets/coco_detection.yml',
   '../runtime.yml',
   '_base_/optimizer_1x.yml',
-  '_base_/ttfnet_resnet18.yml',
+  '_base_/ttfnet_resnet18+transformer.yml',
   '_base_/ttfnet_reader.yml',
 ]
-weights: output/ttfnet_res18_1x_coco/model_final
+weights: output/ttfnet_res18_1x_coco_ema_sync+trans/model_final

@@ -8,7 +8,7 @@ TrainReader:
   - NormalizeImage: {mean: [123.675, 116.28, 103.53], std: [58.395, 57.12, 57.375], is_scale: false}
   - Permute: {}
   batch_transforms:
-  - Gt2TTFTarget: {down_ratio: 4}
+  - Gt2TTFTarget_MULTI_CLS: {down_ratio: 4}
   - PadBatch: {pad_to_stride: 32}
   batch_size: 32
   shuffle: true
