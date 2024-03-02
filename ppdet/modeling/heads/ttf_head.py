@@ -21,6 +21,7 @@ from paddle.regularizer import L2Decay
 from ppdet.core.workspace import register
 from ppdet.modeling.layers import DeformableConvV2, LiteConv
 import numpy as np
+from ppdet.modeling.necks.ccanet import RCCAModule
 
 
 @register
@@ -253,6 +254,7 @@ class TTFHead(nn.Layer):
         hm_decay_iter=-1,  # -1 的时候, 不衰减, 可以先 2e
         hm_init_weight=4,
         wh_init_weight=1,
+        use_cca=False,
     ):
         super(TTFHead, self).__init__()
         self.in_channels = in_channels
@@ -287,6 +289,12 @@ class TTFHead(nn.Layer):
         self.hm_init_weight = hm_init_weight
         self.wh_init_weight = wh_init_weight
 
+        self.use_cca = use_cca
+        if use_cca:
+            self.rcca = RCCAModule(
+                in_channels, in_channels, None, recurrence=2, dropout_prob=0.05
+            )
+
     @classmethod
     def from_config(cls, cfg, input_shape):
         if isinstance(input_shape, (list, tuple)):
@@ -296,6 +304,8 @@ class TTFHead(nn.Layer):
         }
 
     def forward(self, feats):
+        if self.use_cca:
+            feats = self.rcca(feats)
         hm = self.hm_head(feats)
         wh = self.wh_head(feats) * self.wh_offset_base
         return hm, wh

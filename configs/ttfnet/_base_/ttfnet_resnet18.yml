@@ -35,6 +35,7 @@ TTFFPN:
   #   rezero: false
 
 TTFHead:
+  use_cca: false
   hm_loss:
     name: CTFocalLoss
     loss_weight: 1.

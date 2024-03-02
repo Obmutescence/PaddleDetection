@@ -228,7 +228,13 @@ class AuxLayer(nn.Layer):
 
 class RCCAModule(nn.Layer):
     def __init__(
-        self, in_channels, out_channels, num_classes, dropout_prob=0.1, recurrence=1
+        self,
+        in_channels,
+        out_channels,
+        num_classes,
+        dropout_prob=0.1,
+        recurrence=1,
+        with_aux=False,
     ):
         super().__init__()
         inter_channels = in_channels // 4
@@ -237,23 +243,32 @@ class RCCAModule(nn.Layer):
             in_channels, inter_channels, 3, padding=1, bias_attr=False
         )
         self.cca = CrissCrossAttention(inter_channels)
-        self.convb = ConvBNLeakyReLU(
-            inter_channels, inter_channels, 3, padding=1, bias_attr=False
-        )
-        self.out = AuxLayer(
-            in_channels + inter_channels,
-            out_channels,
-            num_classes,
-            dropout_prob=dropout_prob,
-        )
+
+        self.with_aux = with_aux
+
+        if with_aux:
+            self.convb = ConvBNLeakyReLU(
+                inter_channels, inter_channels, 3, padding=1, bias_attr=False
+            )
+            self.out = AuxLayer(
+                in_channels + inter_channels,
+                out_channels,
+                num_classes,
+                dropout_prob=dropout_prob,
+            )
+        else:
+            self.convb = ConvBNLeakyReLU(
+                inter_channels, out_channels, 3, padding=1, bias_attr=False
+            )
 
     def forward(self, x):
         feat = self.conva(x)
         for i in range(self.recurrence):
             feat = self.cca(feat)
         feat = self.convb(feat)
-        output = self.out(paddle.concat([x, feat], axis=1))
-        return output
+        if self.with_aux:
+            feat = self.out(paddle.concat([x, feat], axis=1))
+        return feat
 
 
 class RCCAWrapper(nn.Layer):
@@ -288,13 +303,13 @@ if __name__ == "__main__":
 
     # test CCA
     x = paddle.rand([16, 64, 256, 256])
-    # m = CrissCrossAttention(64)
-    # y = m(x)
-
-    # print(y.shape)
-
-    # test RCCAModule
-    m = RCCAWrapper(64, 32, 3)
+    m = RCCAModule(64, 32, 80)
     y = m(x)
 
     print(y.shape)
+
+    # test RCCAModule
+    # m = RCCAWrapper(64, 32, 3)
+    # y = m(x)
+
+    # print(y.shape)

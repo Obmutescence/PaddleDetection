@@ -34,7 +34,7 @@ from ppdet.modeling.layers import (
 from ..shape_spec import ShapeSpec
 from ..initializer import xavier_uniform_, linear_init_
 from ..layers import MultiHeadAttention
-from .ccanet import CrissCrossAttention, RCCAWrapper
+from .ccanet import CrissCrossAttention, RCCAWrapper, RCCAModule
 from ..backbones.cspresnet import RepVggBlock
 from ..backbones.csp_darknet import BaseConv
 from paddle.jit import to_static
