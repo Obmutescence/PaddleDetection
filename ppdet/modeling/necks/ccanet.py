@@ -274,11 +274,13 @@ class RCCAWrapper(nn.Layer):
         )
 
     def forward(self, x):
+        x = F.max_pool2d(x, 2, 2)
         conva = self.conva(x)
         feat = conva
         for i in range(self.recurrence):
             feat = self.cca(feat)
         feat = self.convb(paddle.concat([x, conva, feat], axis=1))
+        feat = F.upsample(feat, scale_factor=2)
         return feat
 
 
