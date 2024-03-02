@@ -695,7 +695,7 @@ class Gt2TTFTarget(BaseOperator):
             reg_weight = np.zeros((1, feat_size, feat_size), dtype="float32")
 
             gt_bbox = sample["gt_bbox"]
-            gt_class = sample["gt_class"]
+            gt_class = sample["gt_class"].astype(int)
 
             bbox_w = gt_bbox[:, 2] - gt_bbox[:, 0] + 1
             bbox_h = gt_bbox[:, 3] - gt_bbox[:, 1] + 1
@@ -803,7 +803,7 @@ class Gt2TTFTarget_MULTI_CLS(Gt2TTFTarget):
 
         for sample in samples:
             mul_cls_target = np.zeros((self.num_classes,), dtype="float32")
-            index = list(set(sample["gt_class"].flatten().tolist()))
+            index = list(set(sample["gt_class"].astype(int).flatten().tolist()))
             mul_cls_target[index] = 1
             sample["ttf_multi_cls_targe"] = mul_cls_target
             sample.pop("gt_class", None)
