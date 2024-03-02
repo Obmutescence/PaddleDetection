@@ -1,0 +1,8 @@
+_BASE_: [
+  '../datasets/coco_detection.yml',
+  '../runtime.yml',
+  '_base_/optimizer_1x.yml',
+  '_base_/ttfnet_resnet18+transformer+mulcls+alpha+dcnv3.yml',
+  '_base_/ttfnet_reader_mulcls_cutmix.yml',
+]
+weights: output/ttfnet_res18_1x_coco_ema_sync+trans+mulcls+alpha_IoU+dcnv3/model_final
