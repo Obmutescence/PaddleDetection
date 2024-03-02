@@ -2,12 +2,13 @@ import os
 
 import paddle
 import paddle.nn as nn
+import paddle.nn.functional as F
 from paddle.jit import to_static
 
 
 @to_static(full_graph=True)
-def Inf(B, H, W):
-    inf_tensor = paddle.full(shape=(H,), fill_value=float("inf"), dtype="float32")
+def Inf(B, H, W, dtype):
+    inf_tensor = paddle.full(shape=(H,), fill_value=float("inf"), dtype=dtype)
     return -paddle.tile(
         paddle.diag(inf_tensor, 0).unsqueeze(0),
         [B * W, 1, 1],
@@ -20,7 +21,7 @@ class CrissCrossAttention(nn.Layer):
         self.q_conv = nn.Conv2D(in_channels, in_channels // 8, kernel_size=1)
         self.k_conv = nn.Conv2D(in_channels, in_channels // 8, kernel_size=1)
         self.v_conv = nn.Conv2D(in_channels, in_channels, kernel_size=1)
-        self.softmax = nn.Softmax(axis=3)
+        # self.softmax = nn.Softmax(axis=3)
         self.gamma = self.create_parameter(
             shape=(1,), default_initializer=nn.initializer.Constant(0)
         )
@@ -45,12 +46,12 @@ class CrissCrossAttention(nn.Layer):
         proj_v_w = proj_v.transpose([0, 2, 1, 3]).reshape([b * h, -1, w])
 
         energy_h = (
-            (paddle.bmm(proj_q_h, proj_k_h) + Inf(b, h, w))
+            (paddle.bmm(proj_q_h, proj_k_h) + Inf(b, h, w, x.dtype))
             .reshape([b, w, h, h])
             .transpose([0, 2, 1, 3])
         )
         energy_w = paddle.bmm(proj_q_w, proj_k_w).reshape([b, h, w, w])
-        concate = self.softmax(paddle.concat([energy_h, energy_w], axis=3))
+        concate = F.softmax(paddle.concat([energy_h, energy_w], axis=3), axis=3)
 
         attn_h = concate[:, :, :, 0:h].transpose([0, 2, 1, 3]).reshape([b * w, h, h])
         attn_w = concate[:, :, :, h : h + w].reshape([b * h, w, w])
