@@ -289,7 +289,7 @@ class ShortCut(nn.Layer):
                 )
             else:
                 if self.use_cca:
-                    conv_model = RCCAWrapper(in_channels, ch_out)
+                    conv_model = RCCAWrapper(in_channels, ch_out, 1)
                     # conv_model = CrissCrossAttention(in_channels)
                 else:
                     conv_model = nn.Conv2D(
