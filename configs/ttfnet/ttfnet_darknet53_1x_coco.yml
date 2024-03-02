@@ -5,4 +5,4 @@ _BASE_: [
   '_base_/ttfnet_darknet53.yml',
   '_base_/ttfnet_reader.yml',
 ]
-weights: output/ttfnet_darknet53_1x_coco/model_final
+weights: output/ttfnet_darknet53_transformer_1x_coco/model_final
