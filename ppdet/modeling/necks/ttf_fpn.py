@@ -144,27 +144,43 @@ class ConvBNLayer(nn.Layer):
 
 
 class Upsample(nn.Layer):
-    def __init__(self, ch_in, ch_out, norm_type="bn"):
+    def __init__(self, ch_in, ch_out, norm_type="bn", use_dcn=True):
         super(Upsample, self).__init__()
         fan_in = ch_in * 3 * 3
         stdv = 1.0 / math.sqrt(fan_in)
-        self.dcn = DeformableConvV2(
-            ch_in,
-            ch_out,
-            kernel_size=3,
-            weight_attr=ParamAttr(initializer=Uniform(-stdv, stdv)),
-            bias_attr=ParamAttr(
-                initializer=Constant(0), regularizer=L2Decay(0.0), learning_rate=2.0
-            ),
-            lr_scale=2.0,
-            regularizer=L2Decay(0.0),
-        )
+        self.use_dcn = use_dcn
+        if use_dcn:
+            self.dcn = DeformableConvV2(
+                ch_in,
+                ch_out,
+                kernel_size=3,
+                weight_attr=ParamAttr(initializer=Uniform(-stdv, stdv)),
+                bias_attr=ParamAttr(
+                    initializer=Constant(0), regularizer=L2Decay(0.0), learning_rate=2.0
+                ),
+                lr_scale=2.0,
+                regularizer=L2Decay(0.0),
+            )
+        else:
+            self.conv = nn.Conv2D(
+                ch_in,
+                ch_out,
+                kernel_size=3,
+                padding=1,
+                weight_attr=ParamAttr(initializer=Uniform(-stdv, stdv)),
+                bias_attr=ParamAttr(
+                    initializer=Constant(0), regularizer=L2Decay(0.0), learning_rate=2.0
+                ),
+            )
 
         self.bn = batch_norm(ch_out, norm_type=norm_type, initializer=Constant(1.0))
 
     def forward(self, feat):
-        dcn = self.dcn(feat)
-        bn = self.bn(dcn)
+        if self.use_dcn:
+            x = self.dcn(feat)
+        else:
+            x = self.conv(feat)
+        bn = self.bn(x)
         relu = F.relu(bn)
         out = F.interpolate(relu, scale_factor=2.0, mode="bilinear")
         return out
@@ -457,6 +473,7 @@ class TTFFPN(nn.Layer):
         pan=False,
         act="silu",
         use_cca=False,
+        use_dcn_list=[True, True, True],
     ):
         super(TTFFPN, self).__init__()
         self.planes = planes
@@ -481,7 +498,10 @@ class TTFFPN(nn.Layer):
             upsample_module = LiteUpsample if lite_neck else Upsample
             upsample_module = UpsampleDCNv3 if dcnv3_neck else upsample_module
             upsample = self.add_sublayer(
-                "upsample." + str(i), upsample_module(in_c, out_c, norm_type=norm_type)
+                "upsample." + str(i),
+                upsample_module(
+                    in_c, out_c, norm_type=norm_type, use_dcn=use_dcn_list[i]
+                ),
             )
             self.upsample_list.append(upsample)
             if i < self.shortcut_len:

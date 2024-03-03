@@ -255,6 +255,7 @@ class TTFHead(nn.Layer):
         hm_init_weight=4,
         wh_init_weight=1,
         use_cca=False,
+        cca_rezero=False,
     ):
         super(TTFHead, self).__init__()
         self.in_channels = in_channels
@@ -295,6 +296,13 @@ class TTFHead(nn.Layer):
                 in_channels, in_channels, None, recurrence=2, dropout_prob=0.05
             )
 
+        if cca_rezero:
+            self.reweight = self.create_parameter(
+                shape=(1,), attr=ParamAttr(initializer=Constant(0.0))
+            )
+        else:
+            self.reweight = 1
+
     @classmethod
     def from_config(cls, cfg, input_shape):
         if isinstance(input_shape, (list, tuple)):
@@ -304,10 +312,21 @@ class TTFHead(nn.Layer):
         }
 
     def forward(self, feats):
-        if self.use_cca:
-            feats = self.rcca(feats)
-        hm = self.hm_head(feats)
-        wh = self.wh_head(feats) * self.wh_offset_base
+
+        # hm = self.hm_head(feats)
+        # if self.use_cca:
+        #     x = feats + self.rcca(feats) * self.reweight
+        #     wh = self.wh_head(x) * self.wh_offset_base
+        # else:
+        #     wh = self.wh_head(feats) * self.wh_offset_base
+
+        # wh = self.wh_head(feats) * self.wh_offset_base
+        # if self.use_cca:
+        #     x = feats + self.rcca(feats) * self.reweight
+        #     hm = self.hm_head(x)
+        # else:
+        #     hm = self.hm_head(feats)
+
         return hm, wh
 
     def filter_box_by_weight(self, pred, target, weight):
