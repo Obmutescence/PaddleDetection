@@ -5,4 +5,5 @@ _BASE_: [
   '_base_/ttfnet_resnet18+transformer+mulcls+alpha100.yml',
   '_base_/ttfnet_reader_mulcls.yml',
 ]
-weights: output/ttfnet_resnet18+transformer+mulcls+alpha/model_final
+weights: output/ttfnet_res18_1x_coco_ema_sync+trans+mulcls+alpha_IoU100/model_final
+save_dir: output/ttfnet_res18_1x_coco_ema_sync+trans+mulcls+alpha_IoU100
